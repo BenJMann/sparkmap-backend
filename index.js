@@ -101,7 +101,7 @@ app.post('/login', async (req, res) => {
             const tokenPayload = {
               username: user.username,
             };
-            const accessToken = jwt.sign(tokenPayload, 'SECRET');
+            const accessToken = jwt.sign(tokenPayload, process.env.TOKENKEY);
             res.status(201).json({
                 status: 'success',
                 message: 'User Logged In!',

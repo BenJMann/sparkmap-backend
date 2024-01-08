@@ -94,6 +94,29 @@ module.exports = function(socket, io) {
         await client.close();
     })
 
+    const loadDocument = async (client, documentId) => {
+        const result2 = client.db("sparkmap").collection("nodes").find({documentId})
+        const nodes = await result2.toArray();
+        const rootNode = nodes.find((n) => n.root = true)
+        const warnings = []
+
+        function addChildren(node) {
+            if (node.children) {
+                node.children = node.children.map((id) => {
+                    const resolvedChild = nodes.find((nc) => nc.id === id)
+                    if (!resolvedChild) {warnings.push("Could not find child node"); return {text: 'NODE NOT FOUND'}}
+                    else {
+                        addChildren(resolvedChild);
+                        return resolvedChild
+                    }
+                })
+            }
+        }
+        addChildren(rootNode);
+
+        return {rootNode, warnings};
+    }
+
     socket.on("loadDocument", async(data) => {
         if (!socket.data.authorized) return
 
@@ -112,27 +135,7 @@ module.exports = function(socket, io) {
 
         socket.data.documentId = data.documentId;
 
-        const result2 = client.db("sparkmap").collection("nodes").find({documentId: data.documentId})
-
-        const nodes = await result2.toArray();
-
-        const rootNode = nodes.find((n) => n.root = true)
-
-        const warnings = []
-
-        function addChildren(node) {
-            if (node.children) {
-                node.children = node.children.map((id) => {
-                    const resolvedChild = nodes.find((nc) => nc.id === id)
-                    if (!resolvedChild) {warnings.push("Could not find child node"); return {text: 'NODE NOT FOUND'}}
-                    else {
-                        addChildren(resolvedChild);
-                        return resolvedChild
-                    }
-                })
-            }
-        }
-        addChildren(rootNode);
+        const {warnings, rootNode} = await loadDocument(client, data.documentId)
 
         socket.emit("documentLoaded", {warnings, nodes: [rootNode], document: result})
 
@@ -142,45 +145,45 @@ module.exports = function(socket, io) {
     socket.on("newSiblingNode", async (data) => {
         if (!socket.data.authorized) return
 
-        const client = await getClient()
+
         const id = uuidv4();
         const parentId = data.path.slice(-2)[0]
         const nodeId = data.path.slice(-1)[0]
-        const parent = await client.db("sparkmap").collection("nodes").findOne({id: parentId, documentId: socket.data.documentId})
-        console.log(parent);
-        const children = parent.children;
-        const idx = children.indexOf(nodeId);
-        const newChildren = [...children.slice(0, idx + (!data.before ? 1 : 0)), id, ...children.slice(idx + (!data.before ? 1 : 0), children.length)]
-        console.log("ti", data.temporaryId)
-       
-        await client.db("sparkmap").collection("nodes").updateOne({id: parentId, documentId: socket.data.documentId}, {$set: {children: newChildren}})
 
-        await client.db("sparkmap").collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
         let sockets = Array.from(io.sockets.sockets)  
         sockets.forEach((s) => {
             if (s[1].data.documentId === socket.data.documentId && s[1] !== socket)
-                s[1].emit("newSiblingNodeCreated", {path: data.path, before: data.before, creator: socket.data.username, id})
+                s[1].emit("newSiblingNodeCreated", {path: data.path, before: data.before, creator: socket.data.username, id, locked: socket.data.username})
             else if (s[1].data.documentId === socket.data.documentId)
                 s[1].emit("newNodeCompleted", {creator: socket.data.username, id, temporaryId: data.temporaryId})
         })
+
+        const client = await getClient()
+        const parent = await client.db("sparkmap").collection("nodes").findOne({id: parentId, documentId: socket.data.documentId})
+        const children = parent.children;
+        const idx = children.indexOf(nodeId);
+        const newChildren = [...children.slice(0, idx + (!data.before ? 1 : 0)), id, ...children.slice(idx + (!data.before ? 1 : 0), children.length)]
+        await client.db("sparkmap").collection("nodes").updateOne({id: parentId, documentId: socket.data.documentId}, {$set: {children: newChildren}})
+
+        await client.db("sparkmap").collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
         await client.close();
     })
 
     socket.on("newChildNode", async (data) => {
         if (!socket.data.authorized) return
-
-        const client = await getClient()
         const id = uuidv4();
         const nodeId = data.path.slice(-1)[0]
-        await client.db("sparkmap").collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {children: [id]}})
-        await client.db("sparkmap").collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
         let sockets = Array.from(io.sockets.sockets)  
         sockets.forEach((s) => {
             if (s[1].data.documentId === socket.data.documentId && s[1] !== socket)
-                s[1].emit("newChildNodeCreated", {path: data.path, creator: socket.data.username, id})
+                s[1].emit("newChildNodeCreated", {path: data.path, creator: socket.data.username, id, locked: socket.data.username})
             else if (s[1].data.documentId === socket.data.documentId)
                 s[1].emit("newNodeCompleted", {creator: socket.data.username, id, temporaryId: data.temporaryId})
         })
+
+        const client = await getClient()
+        await client.db("sparkmap").collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {children: [id]}})
+        await client.db("sparkmap").collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
 
         await client.close();
     })
@@ -188,15 +191,57 @@ module.exports = function(socket, io) {
     socket.on("updateNodeText", async(data) => {
         if (!socket.data.authorized) return
 
-        const client = await getClient()
         const nodeId = data.path.slice(-1)[0]
-        await client.db("sparkmap").collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {text: data.text, creator: socket.data.username}})
         let sockets = Array.from(io.sockets.sockets)  
         sockets.forEach((s) => {
             if (s[1].data.documentId === socket.data.documentId && s[1] !== socket)
                 s[1].emit("nodeTextUpdated", {path: data.path, text: data.text, creator: socket.data.username})
         })
 
+        const client = await getClient()
+        await client.db("sparkmap").collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {text: data.text, creator: socket.data.username}})
+
+        await client.close();
+    })
+
+    socket.on("lockCell", async(data) => {
+        if (!socket.data.authorized) return
+
+        let sockets = Array.from(io.sockets.sockets)  
+        sockets.forEach((s) => {
+            if (s[1].data.documentId === socket.data.documentId && s[1] !== socket)
+                s[1].emit("cellLocked", {path: data.path, locked: socket.data.username})
+        })
+    })
+
+    socket.on("deleteCell", async(data) => {
+        if (!socket.data.authorized) return
+
+        let sockets = Array.from(io.sockets.sockets)  
+        sockets.forEach((s) => {
+            if (s[1].data.documentId === socket.data.documentId && s[1] !== socket)
+                s[1].emit("cellDeleted", {path: data.path})
+        })
+
+        const nodeId = data.path.slice(-1)[0]
+        const client = await getClient()
+        const node = await client.db("sparkmap").collection("nodes").findOne({id: nodeId, documentId: socket.data.documentId})
+        const children = node.children;
+        const parent = await client.db("sparkmap").collection("nodes").findOne({id: data.parent, documentId: socket.data.documentId})
+        let parentChildren = parent.children;
+
+        const idx = parentChildren.indexOf(nodeId);
+        if (children) {
+            parentChildren = [...parentChildren.slice(0, idx), ...children, ...parentChildren.slice(idx+1, parentChildren.length)]
+        }
+        else {
+            if (parentChildren.length > 2)
+                parentChildren = [...parentChildren.slice(0, idx), ...parentChildren.slice(idx+1, parentChildren.length)]
+            else
+                parentChildren = null
+        }  
+        await client.db("sparkmap").collection("nodes").updateOne({id: parent.id, documentId: socket.data.documentId}, {$set: {children: parentChildren}})
+        await client.db("sparkmap").collection("nodes").deleteOne({id: nodeId, documentId: socket.data.documentId})
         await client.close();
     })
 
