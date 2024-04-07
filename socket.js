@@ -48,7 +48,7 @@ module.exports = function(socket, io) {
 
         const rootId = uuidv4();
         const childId = uuidv4();
-        await client.db("sparkmap").collection("nodes").insertMany([
+        await client.db(process.env.DATABASE_NAME).collection("nodes").insertMany([
             {
                 documentId,
                 root: true,
@@ -67,7 +67,7 @@ module.exports = function(socket, io) {
         const documentName = data.name;
         const lastModified = new Date()
         const user = socket.data.username;
-        await client.db("sparkmap").collection("documents").insertOne({
+        await client.db(process.env.DATABASE_NAME).collection("documents").insertOne({
             documentId,
             documentName,
             lastModified,
@@ -84,7 +84,7 @@ module.exports = function(socket, io) {
         if (!socket.data.authorized) return
 
         const client = await getClient()
-        const documents = client.db("sparkmap").collection("documents").find({
+        const documents = client.db(process.env.DATABASE_NAME).collection("documents").find({
            $or: [
             {user: socket.data.username},
             {shared: socket.data.username}
@@ -95,7 +95,7 @@ module.exports = function(socket, io) {
     })
 
     const loadDocument = async (client, documentId) => {
-        const result2 = client.db("sparkmap").collection("nodes").find({documentId})
+        const result2 = client.db(process.env.DATABASE_NAME).collection("nodes").find({documentId})
         const nodes = await result2.toArray();
         const rootNode = nodes.find((n) => n.root = true)
         const warnings = []
@@ -121,7 +121,7 @@ module.exports = function(socket, io) {
         if (!socket.data.authorized) return
 
         const client = await getClient()
-        const result = client.db("sparkmap").collection("documents").findOne({
+        const result = client.db(process.env.DATABASE_NAME).collection("documents").findOne({
             documentId: data.documentId,
             $or: [
                 {user: socket.data.username},
@@ -159,13 +159,13 @@ module.exports = function(socket, io) {
         })
 
         const client = await getClient()
-        const parent = await client.db("sparkmap").collection("nodes").findOne({id: parentId, documentId: socket.data.documentId})
+        const parent = await client.db(process.env.DATABASE_NAME).collection("nodes").findOne({id: parentId, documentId: socket.data.documentId})
         const children = parent.children;
         const idx = children.indexOf(nodeId);
         const newChildren = [...children.slice(0, idx + (!data.before ? 1 : 0)), id, ...children.slice(idx + (!data.before ? 1 : 0), children.length)]
-        await client.db("sparkmap").collection("nodes").updateOne({id: parentId, documentId: socket.data.documentId}, {$set: {children: newChildren}})
+        await client.db(process.env.DATABASE_NAME).collection("nodes").updateOne({id: parentId, documentId: socket.data.documentId}, {$set: {children: newChildren}})
 
-        await client.db("sparkmap").collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
+        await client.db(process.env.DATABASE_NAME).collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
         await client.close();
     })
 
@@ -182,8 +182,8 @@ module.exports = function(socket, io) {
         })
 
         const client = await getClient()
-        await client.db("sparkmap").collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {children: [id]}})
-        await client.db("sparkmap").collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
+        await client.db(process.env.DATABASE_NAME).collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {children: [id]}})
+        await client.db(process.env.DATABASE_NAME).collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
 
         await client.close();
     })
@@ -199,7 +199,7 @@ module.exports = function(socket, io) {
         })
 
         const client = await getClient()
-        await client.db("sparkmap").collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {text: data.text, creator: socket.data.username}})
+        await client.db(process.env.DATABASE_NAME).collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {text: data.text, creator: socket.data.username}})
 
         await client.close();
     })
@@ -225,9 +225,9 @@ module.exports = function(socket, io) {
 
         const nodeId = data.path.slice(-1)[0]
         const client = await getClient()
-        const node = await client.db("sparkmap").collection("nodes").findOne({id: nodeId, documentId: socket.data.documentId})
+        const node = await client.db(process.env.DATABASE_NAME).collection("nodes").findOne({id: nodeId, documentId: socket.data.documentId})
         const children = node.children;
-        const parent = await client.db("sparkmap").collection("nodes").findOne({id: data.parent, documentId: socket.data.documentId})
+        const parent = await client.db(process.env.DATABASE_NAME).collection("nodes").findOne({id: data.parent, documentId: socket.data.documentId})
         let parentChildren = parent.children;
 
         const idx = parentChildren.indexOf(nodeId);
@@ -240,8 +240,8 @@ module.exports = function(socket, io) {
             else
                 parentChildren = null
         }  
-        await client.db("sparkmap").collection("nodes").updateOne({id: parent.id, documentId: socket.data.documentId}, {$set: {children: parentChildren}})
-        await client.db("sparkmap").collection("nodes").deleteOne({id: nodeId, documentId: socket.data.documentId})
+        await client.db(process.env.DATABASE_NAME).collection("nodes").updateOne({id: parent.id, documentId: socket.data.documentId}, {$set: {children: parentChildren}})
+        await client.db(process.env.DATABASE_NAME).collection("nodes").deleteOne({id: nodeId, documentId: socket.data.documentId})
         await client.close();
     })
 
@@ -249,12 +249,12 @@ module.exports = function(socket, io) {
         if (!socket.data.authorized) return
 
         const client = await getClient()
-        const user = await client.db("sparkmap").collection("users").findOne({username: data.username})
+        const user = await client.db(process.env.DATABASE_NAME).collection("users").findOne({username: data.username})
         if (!user) {
             socket.emit("documentShared", {error: true, message: 'User does not exist.'})
             return
         }
-        await client.db("sparkmap").collection("documents").updateOne({documentId: socket.data.documentId}, {$push: {shared: data.username}})
+        await client.db(process.env.DATABASE_NAME).collection("documents").updateOne({documentId: socket.data.documentId}, {$push: {shared: data.username}})
         socket.emit("documentShared", {error: false})
 
         await client.close();

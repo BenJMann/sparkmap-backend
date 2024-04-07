@@ -50,49 +50,49 @@ app.use(bodyParser.json())
 
 
 
-app.post('/register', async (req, res) => {
-  let client;
-    try {
-        client = await getClient();
-        const result = await client.db("sparkmap").collection("users").findOne({username: req.body.username})
-        if (result) {
-            const err = new Error('Email Taken!')
-            err.status = 400;
-            throw err;
-        }
-        const user = {
-            username: req.body.username,
-            password: await bcrypt.hash(req.body.password, 12),
-        }
+// app.post('/register', async (req, res) => {
+//   let client;
+//     try {
+//         client = await getClient();
+//         const result = await client.db(process.env.DATABASE_NAME).collection("users").findOne({username: req.body.username})
+//         if (result) {
+//             const err = new Error('Email Taken!')
+//             err.status = 400;
+//             throw err;
+//         }
+//         const user = {
+//             username: req.body.username,
+//             password: await bcrypt.hash(req.body.password, 12),
+//         }
 
-        await client.db("sparkmap").collection("users").insertOne(user)
+//         await client.db(process.env.DATABASE_NAME).collection("users").insertOne(user)
 
-        res.status(201).json({
-          status: 'success',
-          message: 'User Registered!',
-          data: {
-            user: {
-                email: user.username,
-            },
-          },
-        });
+//         res.status(201).json({
+//           status: 'success',
+//           message: 'User Registered!',
+//           data: {
+//             user: {
+//                 email: user.username,
+//             },
+//           },
+//         });
 
-    } catch (err) {
-        res.status(err.status).json({
-            status: 'fail',
-            message: err.message,
-          });
-    }
-    finally {
-        await client.close();
-    }
-});
+//     } catch (err) {
+//         res.status(err.status).json({
+//             status: 'fail',
+//             message: err.message,
+//           });
+//     }
+//     finally {
+//         await client.close();
+//     }
+// });
 
 app.post('/login', async (req, res) => {
   let client;
     try {
         client = await getClient();
-        const user = await client.db("sparkmap").collection("users").findOne({username: req.body.username})
+        const user = await client.db(process.env.DATABASE_NAME).collection("users").findOne({username: req.body.username})
         if (!user) {
             const err = new Error('User Not Found!')
             err.status = 400;
