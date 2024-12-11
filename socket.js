@@ -19,16 +19,9 @@ module.exports = function(socket, io) {
     socket.on("login", async (data) => {
         if (verifyToken(socket, data)) {
             console.log("Logged in", socket.id)
-            socket.emit("loggedIn")
+            socket.emit("loggedIn", data.reload)
         }
 
-    })
-
-    socket.on("loadSession", async (data) => {
-        if (verifyToken(socket, data)) {
-            console.log("Logged in", socket.id)
-            socket.emit("sessionLoaded");
-        }
     })
 
     socket.on("logOut", async () => {

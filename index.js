@@ -31,7 +31,7 @@ const io = socketIo(server, {
 
 
 
-  require("./socketAuth.js")(io);
+  require("./socketAuth.js")(io); //Adds tokenkey to socket
   io.on("connection", (socket) => {
     console.log("New client connected "  + socket.id);
     socket.data.authorized = false;
