@@ -121,7 +121,9 @@ module.exports = function(socket, io) {
                 {shared: socket.data.username}
             ]
         })
-        if (!result) {
+
+        const doc = await result;
+        if (!doc) {
             socket.emit("fatalError", {error: true, message: "You are not authorized to view this document, or it doesn't exist"})
             return
         }
@@ -130,7 +132,7 @@ module.exports = function(socket, io) {
 
         const {warnings, rootNode} = await loadDocument(client, data.documentId)
 
-        socket.emit("documentLoaded", {warnings, nodes: [rootNode], document: result})
+        socket.emit("documentLoaded", {warnings, nodes: [rootNode], document: doc})
 
         await client.close();
     })
