@@ -153,15 +153,49 @@ module.exports = function(socket, io) {
                 s[1].emit("newNodeCompleted", {creator: socket.data.username, id, temporaryId: data.temporaryId})
         })
 
-        const client = await getClient()
-        const parent = await client.db(process.env.DATABASE_NAME).collection("nodes").findOne({id: parentId, documentId: socket.data.documentId})
-        const children = parent.children;
-        const idx = children.indexOf(nodeId);
-        const newChildren = [...children.slice(0, idx + (!data.before ? 1 : 0)), id, ...children.slice(idx + (!data.before ? 1 : 0), children.length)]
-        await client.db(process.env.DATABASE_NAME).collection("nodes").updateOne({id: parentId, documentId: socket.data.documentId}, {$set: {children: newChildren}})
+        const client = await getClient();
 
-        await client.db(process.env.DATABASE_NAME).collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
+        await client.db(process.env.DATABASE_NAME).collection("nodes").bulkWrite([
+            {
+                updateOne: {
+                    filter: { id: parentId, documentId: socket.data.documentId },
+                    update: [
+                        {
+                            $set: {
+                                children: {
+                                    $let: {
+                                        vars: {
+                                            idx: { $indexOfArray: ["$children", nodeId] },
+                                        },
+                                        in: {
+                                            $concatArrays: [
+                                                { $slice: ["$children", 0, { $add: ["$$idx", data.before ? 0 : 1] }] },
+                                                [id],
+                                                { $slice: ["$children", { $add: ["$$idx", data.before ? 0 : 1] }, { $size: "$children" }] },
+                                            ],
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    ],
+                },
+            },
+            {
+                insertOne: {
+                    document: {
+                        id,
+                        text: '',
+                        documentId: socket.data.documentId,
+                        creator: socket.data.username,
+                    },
+                },
+            },
+        ]);
+        
         await client.close();
+        
+        
     })
 
 
@@ -177,10 +211,28 @@ module.exports = function(socket, io) {
                 s[1].emit("newNodeCompleted", {creator: socket.data.username, id, temporaryId: data.temporaryId})
         })
 
-        const client = await getClient()
-        await client.db(process.env.DATABASE_NAME).collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {children: [id]}})
-        await client.db(process.env.DATABASE_NAME).collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
-
+        const client = await getClient();
+        await client.db(process.env.DATABASE_NAME).collection("nodes").bulkWrite([
+            // Update the parent's children array
+            {
+                updateOne: {
+                    filter: { id: nodeId, documentId: socket.data.documentId },
+                    update: { $push: { children: id } },
+                },
+            },
+            // Insert the new node
+            {
+                insertOne: {
+                    document: {
+                        id,
+                        text: '',
+                        documentId: socket.data.documentId,
+                        creator: socket.data.username,
+                    },
+                },
+            },
+        ]);
+    
         await client.close();
     })
 
