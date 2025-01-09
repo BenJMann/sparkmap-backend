@@ -164,6 +164,7 @@ module.exports = function(socket, io) {
         await client.close();
     })
 
+
     socket.on("newChildNode", async (data) => {
         if (!socket.data.authorized) return
         const id = uuidv4();
@@ -180,6 +181,31 @@ module.exports = function(socket, io) {
         await client.db(process.env.DATABASE_NAME).collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {children: [id]}})
         await client.db(process.env.DATABASE_NAME).collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
 
+        await client.close();
+    })
+
+    socket.on("appendChildNode", async (data) => {
+        if (!socket.data.authorized) return
+
+
+        const id = uuidv4();
+        const nodeId = data.path.slice(-1)[0]
+
+        let sockets = Array.from(io.sockets.sockets)  
+        sockets.forEach((s) => {
+            if (s[1].data.documentId === socket.data.documentId && s[1] !== socket)
+                s[1].emit("newChildNodeAppended", {path: data.path,  creator: socket.data.username, id, locked: socket.data.username})
+            else if (s[1].data.documentId === socket.data.documentId)
+                s[1].emit("newNodeCompleted", {creator: socket.data.username, id, temporaryId: data.temporaryId})
+        })
+
+        const client = await getClient()
+        const node = await client.db(process.env.DATABASE_NAME).collection("nodes").findOne({id: nodeId, documentId: socket.data.documentId})
+        const children = node.children;
+        const newChildren = [...children, id]
+        await client.db(process.env.DATABASE_NAME).collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {children: newChildren}})
+
+        await client.db(process.env.DATABASE_NAME).collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
         await client.close();
     })
 
