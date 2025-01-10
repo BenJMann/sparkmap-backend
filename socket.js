@@ -70,7 +70,79 @@ module.exports = function(socket, io) {
 
         socket.emit("documentCreated", {documentId})
         await client.close();
+    })
 
+
+    function nestedToFlatArray(documentId, nested, creator) {
+        const flatArray = [];
+        const rootNodes = []
+      
+        function processNode(node) {
+          const currentUuid = uuidv4();
+          const { text, children } = node;
+      
+          // Create the MongoDB-style document
+          const document = {
+            documentId,
+            id: currentUuid,
+            text,
+            children: [],
+            creator
+          };
+      
+          // Process each child recursively and add their UUIDs to the `children` array
+            for (const child of children) {
+                const childUuid = processNode(child, false);
+                document.children.push(childUuid);
+              }
+          
+
+          // Add the document to the flat array
+          flatArray.push(document);
+      
+          return currentUuid;
+        }
+      
+        // Process each root node
+        for (const rootNode of nested) {
+          const id = processNode(rootNode);
+          rootNodes.push(id)
+        }
+      
+        return {rootNodes, flatArray};
+      }
+
+    socket.on("loadCSV", async (data) => {
+        if (!socket.data.authorized) return
+
+        const documentId = makeid(12);
+        const {rootNodes, flatArray} = nestedToFlatArray(documentId, JSON.parse(data.json), socket.data.username);
+
+        const client = await getClient()
+
+        await client.db(process.env.DATABASE_NAME).collection("nodes").insertMany([
+            {
+                documentId,
+                id: uuidv4(),
+                root: true,
+                children: rootNodes,
+                creator: socket.data.username
+            },
+            ...flatArray])
+
+        const documentName = data.name;
+        const lastModified = new Date()
+        const user = socket.data.username;
+        await client.db(process.env.DATABASE_NAME).collection("documents").insertOne({
+            documentId,
+            documentName,
+            lastModified,
+            user,
+            shared: []
+        })
+
+        socket.emit("csvLoaded", {documentId})
+        await client.close();
     })
 
     socket.on("getDocuments", async () => {
@@ -90,7 +162,8 @@ module.exports = function(socket, io) {
     const loadDocument = async (client, documentId) => {
         const result2 = client.db(process.env.DATABASE_NAME).collection("nodes").find({documentId})
         const nodes = await result2.toArray();
-        const rootNode = nodes.find((n) => n.root = true)
+        const rootNode = nodes.find((n) => n.root === true)
+        console.log(rootNode)
         const warnings = []
 
         function addChildren(node) {
