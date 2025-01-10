@@ -70,7 +70,79 @@ module.exports = function(socket, io) {
 
         socket.emit("documentCreated", {documentId})
         await client.close();
+    })
 
+
+    function nestedToFlatArray(documentId, nested, creator) {
+        const flatArray = [];
+        const rootNodes = []
+      
+        function processNode(node) {
+          const currentUuid = uuidv4();
+          const { text, children } = node;
+      
+          // Create the MongoDB-style document
+          const document = {
+            documentId,
+            id: currentUuid,
+            text,
+            children: [],
+            creator
+          };
+      
+          // Process each child recursively and add their UUIDs to the `children` array
+            for (const child of children) {
+                const childUuid = processNode(child, false);
+                document.children.push(childUuid);
+              }
+          
+
+          // Add the document to the flat array
+          flatArray.push(document);
+      
+          return currentUuid;
+        }
+      
+        // Process each root node
+        for (const rootNode of nested) {
+          const id = processNode(rootNode);
+          rootNodes.push(id)
+        }
+      
+        return {rootNodes, flatArray};
+      }
+
+    socket.on("loadCSV", async (data) => {
+        if (!socket.data.authorized) return
+
+        const documentId = makeid(12);
+        const {rootNodes, flatArray} = nestedToFlatArray(documentId, JSON.parse(data.json), socket.data.username);
+
+        const client = await getClient()
+
+        await client.db(process.env.DATABASE_NAME).collection("nodes").insertMany([
+            {
+                documentId,
+                id: uuidv4(),
+                root: true,
+                children: rootNodes,
+                creator: socket.data.username
+            },
+            ...flatArray])
+
+        const documentName = data.name;
+        const lastModified = new Date()
+        const user = socket.data.username;
+        await client.db(process.env.DATABASE_NAME).collection("documents").insertOne({
+            documentId,
+            documentName,
+            lastModified,
+            user,
+            shared: []
+        })
+
+        socket.emit("csvLoaded", {documentId})
+        await client.close();
     })
 
     socket.on("getDocuments", async () => {
@@ -90,7 +162,8 @@ module.exports = function(socket, io) {
     const loadDocument = async (client, documentId) => {
         const result2 = client.db(process.env.DATABASE_NAME).collection("nodes").find({documentId})
         const nodes = await result2.toArray();
-        const rootNode = nodes.find((n) => n.root = true)
+        const rootNode = nodes.find((n) => n.root === true)
+        console.log(rootNode)
         const warnings = []
 
         function addChildren(node) {
@@ -153,15 +226,58 @@ module.exports = function(socket, io) {
                 s[1].emit("newNodeCompleted", {creator: socket.data.username, id, temporaryId: data.temporaryId})
         })
 
-        const client = await getClient()
-        const parent = await client.db(process.env.DATABASE_NAME).collection("nodes").findOne({id: parentId, documentId: socket.data.documentId})
-        const children = parent.children;
-        const idx = children.indexOf(nodeId);
-        const newChildren = [...children.slice(0, idx + (!data.before ? 1 : 0)), id, ...children.slice(idx + (!data.before ? 1 : 0), children.length)]
-        await client.db(process.env.DATABASE_NAME).collection("nodes").updateOne({id: parentId, documentId: socket.data.documentId}, {$set: {children: newChildren}})
+        const client = await getClient();
 
-        await client.db(process.env.DATABASE_NAME).collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
+        await client.db(process.env.DATABASE_NAME).collection("nodes").bulkWrite([
+            {
+                updateOne: {
+                    filter: { id: parentId, documentId: socket.data.documentId },
+                    update: [
+                        {
+                            $set: {
+                                children: {
+                                    $let: {
+                                        vars: {
+                                            idx: { $indexOfArray: ["$children", nodeId] },
+                                        },
+                                        in: {
+                                            $cond: {
+                                                if: { $lt: [{$add: ["$$idx", data.before ? 0 : 1]}, 1] },
+                                                then: {$concatArrays: [
+                                                    [id],
+                                                    "$children",
+                                                ]},
+                                                else: {
+                                                    $concatArrays: [
+                                                        { $slice: ["$children", 0, { $add: ["$$idx", data.before ? 0 : 1] }] },
+                                                        [id],
+                                                        { $slice: ["$children", { $add: ["$$idx", data.before ? 0 : 1] }, { $size: "$children" }] },
+                                                    ],
+                                                },
+                                            }
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    ],
+                },
+            },
+            {
+                insertOne: {
+                    document: {
+                        id,
+                        text: '',
+                        documentId: socket.data.documentId,
+                        creator: socket.data.username,
+                    },
+                },
+            },
+        ]);
+        
         await client.close();
+        
+        
     })
 
 
@@ -177,10 +293,28 @@ module.exports = function(socket, io) {
                 s[1].emit("newNodeCompleted", {creator: socket.data.username, id, temporaryId: data.temporaryId})
         })
 
-        const client = await getClient()
-        await client.db(process.env.DATABASE_NAME).collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {children: [id]}})
-        await client.db(process.env.DATABASE_NAME).collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
-
+        const client = await getClient();
+        await client.db(process.env.DATABASE_NAME).collection("nodes").bulkWrite([
+            // Update the parent's children array
+            {
+                updateOne: {
+                    filter: { id: nodeId, documentId: socket.data.documentId },
+                    update: { $push: { children: id } },
+                },
+            },
+            // Insert the new node
+            {
+                insertOne: {
+                    document: {
+                        id,
+                        text: '',
+                        documentId: socket.data.documentId,
+                        creator: socket.data.username,
+                    },
+                },
+            },
+        ]);
+    
         await client.close();
     })
 
@@ -199,14 +333,31 @@ module.exports = function(socket, io) {
                 s[1].emit("newNodeCompleted", {creator: socket.data.username, id, temporaryId: data.temporaryId})
         })
 
-        const client = await getClient()
-        const node = await client.db(process.env.DATABASE_NAME).collection("nodes").findOne({id: nodeId, documentId: socket.data.documentId})
-        const children = node.children;
-        const newChildren = [...children, id]
-        await client.db(process.env.DATABASE_NAME).collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {children: newChildren}})
+        const client = await getClient();
 
-        await client.db(process.env.DATABASE_NAME).collection("nodes").insertOne({id, text: '', documentId: socket.data.documentId, creator: socket.data.username})
+        await client.db(process.env.DATABASE_NAME).collection("nodes").bulkWrite([
+            // Update the parent's children array by appending the new ID
+            {
+                updateOne: {
+                    filter: { id: nodeId, documentId: socket.data.documentId },
+                    update: { $push: { children: id } },
+                },
+            },
+            // Insert the new node
+            {
+                insertOne: {
+                    document: {
+                        id,
+                        text: '',
+                        documentId: socket.data.documentId,
+                        creator: socket.data.username,
+                    },
+                },
+            },
+        ]);
+        
         await client.close();
+        
     })
 
     socket.on("updateNodeText", async(data) => {
@@ -256,10 +407,10 @@ module.exports = function(socket, io) {
             parentChildren = [...parentChildren.slice(0, idx), ...children, ...parentChildren.slice(idx+1, parentChildren.length)]
         }
         else {
-            if (parentChildren.length > 2)
+            if (parentChildren.length >= 2)
                 parentChildren = [...parentChildren.slice(0, idx), ...parentChildren.slice(idx+1, parentChildren.length)]
             else
-                parentChildren = null
+                parentChildren = []
         }  
         await client.db(process.env.DATABASE_NAME).collection("nodes").updateOne({id: parent.id, documentId: socket.data.documentId}, {$set: {children: parentChildren}})
         await client.db(process.env.DATABASE_NAME).collection("nodes").deleteOne({id: nodeId, documentId: socket.data.documentId})
