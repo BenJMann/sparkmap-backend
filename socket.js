@@ -159,6 +159,51 @@ module.exports = function(socket, io) {
         await client.close();
     })
 
+    socket.on("renameDocument", async (data) => {
+        if (!socket.data.authorized) return
+
+        const client = await getClient()
+
+        await client.db(process.env.DATABASE_NAME).collection("documents").updateOne({
+            documentId: data.documentId,
+            user: socket.data.username
+        },     
+            {$set: {documentName: data.newDocumentName}})
+
+        const documents = client.db(process.env.DATABASE_NAME).collection("documents").find({
+           $or: [
+            {user: socket.data.username},
+            {shared: socket.data.username}
+           ]
+        })
+        socket.emit("documentsGot", await documents.toArray())
+        await client.close();
+    })
+
+    socket.on("deleteDocument", async (data) => {
+        if (!socket.data.authorized) return
+
+        const client = await getClient()
+
+        await client.db(process.env.DATABASE_NAME).collection("documents").deleteOne({
+            documentId: data.documentId,
+            user: socket.data.username
+        })
+
+        await client.db(process.env.DATABASE_NAME).collection("nodes").deleteMany({
+            documentId: data.documentId
+        })
+
+        const documents = client.db(process.env.DATABASE_NAME).collection("documents").find({
+           $or: [
+            {user: socket.data.username},
+            {shared: socket.data.username}
+           ]
+        })
+        socket.emit("documentsGot", await documents.toArray())
+        await client.close();
+    })
+
     const loadDocument = async (client, documentId) => {
         const result2 = client.db(process.env.DATABASE_NAME).collection("nodes").find({documentId})
         const nodes = await result2.toArray();
