@@ -376,6 +376,22 @@ module.exports = function(socket, io) {
         await client.close();
     })
 
+    socket.on("updateNodeStyle", async(data) => {
+        if (!socket.data.authorized) return
+
+        const nodeId = data.path.slice(-1)[0]
+        let sockets = Array.from(io.sockets.sockets)  
+        sockets.forEach((s) => {
+            if (s[1].data.documentId === socket.data.documentId && s[1] !== socket)
+                s[1].emit("nodeStyleUpdated", {path: data.path, property: data.property, value: data.value})
+        })
+
+        const client = await getClient()
+        await client.db(process.env.DATABASE_NAME).collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {[`style.${data.property}`]: data.value}})
+
+        await client.close();
+    })
+
     socket.on("lockCell", async(data) => {
         if (!socket.data.authorized) return
 
