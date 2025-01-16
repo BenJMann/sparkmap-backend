@@ -514,11 +514,13 @@ module.exports = function(socket, io) {
         const nodeTo = await documents.findOne({ id: toId });
 
         if (!nodeFrom || !nodeTo) {
+            await client.close()
             throw new Error("Source or target node not found.");
         }
 
         // Prevent pasting a node as a child of itself
         if (await isNodeParentOf(documents, nodeTo, nodeFrom)) {
+            await client.close();
             throw new Error("Cannot paste a node into one of its descendants.");
         }
 
@@ -526,6 +528,7 @@ module.exports = function(socket, io) {
         const fromParent = await documents.findOne({ children: fromId });
 
         if (!toParent || !fromParent) {
+            await client.close()
             throw new Error("Parent nodes not found.");
         }
 
@@ -534,6 +537,7 @@ module.exports = function(socket, io) {
         const fromIdx = fromParent.children.indexOf(fromId);
 
         if (toIdx === -1 || fromIdx === -1) {
+            await client.close();
             throw new Error("Invalid node indices for paste operation.");
         }
 
