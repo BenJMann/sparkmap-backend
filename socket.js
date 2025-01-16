@@ -543,16 +543,16 @@ module.exports = function(socket, io) {
             const [movedNode] = children.splice(fromIdx, 1); // Remove nodeFrom
             children.splice(toIdx > fromIdx ? toIdx - 1 : toIdx, 0, movedNode); // Insert at new index
             await documents.updateOne({ id: fromParent.id }, { $set: { children } });
+            await client.close()
         } else {
             // Move node between different parents
             await documents.updateOne({ id: fromParent.id }, { $pull: { children: fromId } }); // Remove from old parent
             await documents.updateOne({ id: toParent.id }, { $push: { children: { $each: [fromId], $position: toIdx } } }); // Add to new parent
+            await client.close(); // Ensure MongoDB client is closed
         }
     } catch (error) {
         console.error("Error in pasteNode:", error);
         throw error;
-    } finally {
-        await client.close();
     }
 });
 
