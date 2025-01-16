@@ -492,4 +492,77 @@ module.exports = function(socket, io) {
 
         await client.close();
     })
-  };
+
+  socket.on("pasteNode", async(data) => {
+    const {before, toPath, fromPath} = data
+
+    let sockets = Array.from(io.sockets.sockets)  
+    sockets.forEach((s) => {
+        if (s[1].data.documentId === socket.data.documentId && s[1] !== socket)
+            s[1].emit("nodePasted", data)
+    })
+
+    const toId = toPath.slice(-1)[0]
+    const fromId = fromPath.slice(-1)[0]
+
+    const client = await getClient();
+    try {
+        const db = client.db(process.env.DATABASE_NAME);
+        const documents = db.collection('nodes');
+
+        const nodeFrom = await documents.findOne({ id: fromId });
+        const nodeTo = await documents.findOne({ id: toId });
+
+        if (!nodeFrom || !nodeTo) {
+            throw new Error("Source or target node not found.");
+        }
+
+        // Prevent pasting a node as a child of itself
+        if (await isNodeParentOf(documents, nodeTo, nodeFrom)) {
+            throw new Error("Cannot paste a node into one of its descendants.");
+        }
+
+        const toParent = await documents.findOne({ children: toId });
+        const fromParent = await documents.findOne({ children: fromId });
+
+        if (!toParent || !fromParent) {
+            throw new Error("Parent nodes not found.");
+        }
+
+        // Find insertion and removal indices
+        const toIdx = toParent.children.indexOf(toId) + (!before ? 1 : 0);
+        const fromIdx = fromParent.children.indexOf(fromId);
+
+        if (toIdx === -1 || fromIdx === -1) {
+            throw new Error("Invalid node indices for paste operation.");
+        }
+
+        if (toParent.id == fromParent.id) {
+            // Reorder within the same parent
+            const children = [...fromParent.children];
+            const [movedNode] = children.splice(fromIdx, 1); // Remove nodeFrom
+            children.splice(toIdx > fromIdx ? toIdx - 1 : toIdx, 0, movedNode); // Insert at new index
+            await documents.updateOne({ id: fromParent.id }, { $set: { children } });
+        } else {
+            // Move node between different parents
+            await documents.updateOne({ id: fromParent.id }, { $pull: { children: fromId } }); // Remove from old parent
+            await documents.updateOne({ id: toParent.id }, { $push: { children: { $each: [fromId], $position: toIdx } } }); // Add to new parent
+        }
+    } catch (error) {
+        console.error("Error in pasteNode:", error);
+        throw error;
+    } finally {
+        await client.close();
+    }
+});
+
+const isNodeParentOf = async (documents, node, parent) => {
+    let curNode = await documents.findOne({ children: node.id });
+    while (curNode) {
+        if (curNode.id === parent.id) return true;
+        curNode = await documents.findOne({ children: curNode.id });
+    }
+    return false;
+}
+
+}
