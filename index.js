@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 const bodyParser  = require('body-parser')
 const cors = require('cors')
 const http = require('http')
-const socketIo = require("socket.io");
+const { Server } = require('socket.io');
 
 const auth = require('./authentication.js')
 
@@ -19,7 +19,10 @@ const port = process.env.port;
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, {
+const io = new Server(server, {
+  connectionStateRecovery: {
+    skipMiddlewares: false
+  },
   cors: {
     origin: "*",
     // origin: allowedDomains, -- To only allow same as Express seems to work need to check later
@@ -33,9 +36,17 @@ const io = socketIo(server, {
 
   require("./socketAuth.js")(io); //Adds tokenkey to socket
   io.on("connection", (socket) => {
-    console.log("New client connected "  + socket.id);
-    socket.data.authorized = false;
-    require('./socket.js')(socket, io);
+    if (socket.recovered) {
+      console.log("Client recovered "  + socket.id);
+      socket.data.authorized = false;
+      socket.emit("recovered")
+      require('./socket.js')(socket, io)
+    }
+    else {
+      console.log("New client connected "  + socket.id);
+      socket.data.authorized = false;
+      require('./socket.js')(socket, io);
+    }
   });
 
 
