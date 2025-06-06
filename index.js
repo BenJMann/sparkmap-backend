@@ -126,7 +126,8 @@ app.post('/login', async (req, res) => {
             throw err;
           }
       } catch (err) {
-        res.status(err.status).json({
+        console.log(err.message)
+        res.status(err.status || 400).json({
             status: 'fail',
             message: err.message,
           });
