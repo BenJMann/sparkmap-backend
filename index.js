@@ -137,11 +137,12 @@ app.post('/login', async (req, res) => {
     }
 });
 
-app.use(auth);
-
 app.get("/hi", (req, res) => {
     res.send({text: "Hello"})
 })
+
+
+app.use(auth);
 
 
 server.listen(port, () => console.log(`Listening on port ${port}`))
