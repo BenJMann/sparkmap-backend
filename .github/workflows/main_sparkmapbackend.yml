@@ -65,4 +65,5 @@ jobs:
           app-name: 'SparkmapBackend'
           slot-name: 'Production'
           package: .
+          startup-command: 'npm start'
           
