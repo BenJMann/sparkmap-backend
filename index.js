@@ -14,7 +14,7 @@ const auth = require('./authentication.js')
 
 const getClient = require('./getClient.js')
 
-const port = process.env.PORT; 
+const port = process.env.PORT || 5000;
 
 
 const app = express();
@@ -137,6 +137,10 @@ app.post('/login', async (req, res) => {
     }
 });
 
+app.get("/", (req, res) => {
+    res.send({text: "Success!"})
+})
+
 app.get("/hi", (req, res) => {
     res.send({text: "Hello"})
 })
@@ -144,5 +148,6 @@ app.get("/hi", (req, res) => {
 
 // app.use(auth);
 
-
+console.log("About to start server")
 server.listen(port, () => console.log(`Listening on port ${port}`))
+console.log(`Server running on port ${port}`);
