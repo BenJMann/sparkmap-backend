@@ -26,7 +26,7 @@ const io = new Server(server, {
   cors: {
     origin: "*",
     // origin: allowedDomains, -- To only allow same as Express seems to work need to check later
-    // methods: ["GET", "POST"]
+     methods: ["GET", "POST"]
   },
   transports: ['websocket']
   });
@@ -142,7 +142,7 @@ app.get("/hi", (req, res) => {
 })
 
 
-app.use(auth);
+// app.use(auth);
 
 
 server.listen(port, () => console.log(`Listening on port ${port}`))
