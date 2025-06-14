@@ -12,7 +12,7 @@ const { Server } = require('socket.io');
 
 const auth = require('./authentication.js')
 
-const getClient = require('./getClient.js')
+const {getDB} = require('./getClient.js')
 
 const port = process.env.PORT || 5000;
 
@@ -40,12 +40,12 @@ const io = new Server(server, {
       console.log("Client recovered "  + socket.id);
       socket.data.authorized = false;
       socket.emit("recovered")
-      require('./socket.js')(socket, io)
+      require('./sockets/socket.js')(socket, io)
     }
     else {
       console.log("New client connected "  + socket.id);
       socket.data.authorized = false;
-      require('./socket.js')(socket, io);
+      require('./sockets/socket.js')(socket, io);
     }
   });
 
@@ -102,8 +102,8 @@ app.use(bodyParser.json())
 app.post('/login', async (req, res) => {
   let client;
     try {
-        client = await getClient();
-        const user = await client.db(process.env.DATABASE_NAME).collection("users").findOne({username: req.body.username})
+        client = await getDB();
+        const user = await client.collection("users").findOne({username: req.body.username})
         if (!user) {
             const err = new Error('User Not Found!')
             err.status = 400;
@@ -131,10 +131,7 @@ app.post('/login', async (req, res) => {
             status: 'fail',
             message: err.message,
           });
-      }    
-      finally {
-        await client.close();
-    }
+      }
 });
 
 app.get("/", (req, res) => {
