@@ -9,6 +9,7 @@ const documentHandlers = require("./documentHandlers.js")
 const newNodeHandlers = require("./newNodeHandlers.js")
 const singleNodeOperations = require ("./singleNodeOperations.js")
 const multiNodeOperations = require("./multiNodeOperations.js");
+const AIHandlers = require("./AIHandler.js")
 
 
 module.exports = function(socket, io) {
@@ -18,6 +19,7 @@ module.exports = function(socket, io) {
     newNodeHandlers(socket, io);
     singleNodeOperations(socket, io);
     multiNodeOperations(socket, io);
+    AIHandlers(socket, io);
 
     socket.on("disconnect", () => {
       console.log("Client disconnected", socket.id);
