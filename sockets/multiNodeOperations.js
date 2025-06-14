@@ -107,6 +107,54 @@ module.exports = function(socket, io) {
         }
     });
 
+    socket.on("pasteNodeAsChild", async(data) => {
+        const {before, toPath, fromPath} = data
+
+        let sockets = Array.from(io.sockets.sockets)  
+        sockets.forEach((s) => {
+            if (s[1].data.documentId === socket.data.documentId && s[1] !== socket)
+                s[1].emit("nodePastedAsChild", data)
+        })
+
+        const toId = toPath.slice(-1)[0]
+        const fromId = fromPath.slice(-1)[0]
+
+        const client = await getDB();
+        const session = client.client.startSession();
+        try {
+            await session.withTransaction( async () => {
+                const documents = client.collection('nodes');
+
+                const nodeFrom = await documents.findOne({ id: fromId });
+                const nodeTo = await documents.findOne({ id: toId });
+
+                if (!nodeFrom || !nodeTo) {
+                    throw new Error("Source or target node not found.");
+                }
+
+                // Prevent pasting a node as a child of itself
+                if (await isNodeParentOf(documents, nodeTo, nodeFrom)) {
+                    throw new Error("Cannot paste a node into one of its descendants.");
+                }
+
+                const fromParent = await documents.findOne({ children: fromId });
+
+                if (!fromParent) {
+                    throw new Error("Parent nodes not found.");
+                }
+                
+                // Move node between different parents
+                await documents.updateOne({ id: fromParent.id }, { $pull: { children: fromId } }); // Remove from old parent
+                await documents.updateOne({ id: toId }, { $push: { children: fromId} }); // Add to new parent
+            })
+            
+        } catch (error) {
+            console.error("Error in pasteNode:", error);
+        } finally {
+            session.endSession();
+        }
+    });
+
     const isNodeParentOf = async (documents, node, parent) => {
         let curNode = await documents.findOne({ children: node.id });
         while (curNode) {

@@ -8,7 +8,7 @@ module.exports = function(socket, io) {
     socket.on("newDocument", async (data) => {
         if (!socket.data.authorized) return
 
-        const documentId = makeid(12);
+        const documentId = makeid(50);
         
         const rootId = uuidv4();
         const childId = uuidv4();
@@ -59,7 +59,7 @@ module.exports = function(socket, io) {
     socket.on("loadCSV", async (data) => {
         if (!socket.data.authorized) return
 
-        const documentId = makeid(12);
+        const documentId = makeid(50);
         const {rootNodes, flatArray} = nestedToFlatArray(documentId, JSON.parse(data.json), socket.data.username);
 
         const client = await getDB()

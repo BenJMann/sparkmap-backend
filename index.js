@@ -10,6 +10,8 @@ const cors = require('cors')
 const http = require('http')
 const { Server } = require('socket.io');
 
+const helmet = require("helmet")
+
 const auth = require('./authentication.js')
 
 const {getDB} = require('./getClient.js')
@@ -51,7 +53,7 @@ const io = new Server(server, {
 
 
 
-
+app.use(helmet());
 app.use(cors())
 app.use(express.json());
 app.use(bodyParser.urlencoded())
@@ -121,7 +123,7 @@ app.post('/login', async (req, res) => {
                 },
               });
         } else {
-            const err = new Error('Wrong Password!');
+            const err = new Error('Invalid Credentials.');
             err.status = 400;
             throw err;
           }
