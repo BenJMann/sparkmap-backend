@@ -1,4 +1,5 @@
 const {makeid, nestedToFlatArray} = require("./util.js")
+const {v4: uuidv4} = require('uuid')
 const {getDB} = require('../getClient.js')
 
 module.exports = function(socket, io) {

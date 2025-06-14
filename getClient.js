@@ -40,4 +40,3 @@ process.on('SIGTERM', async () => {
 
 // Export the reusable client
 module.exports.getDB = () => mongoClient.db(process.env.DATABASE_NAME);
-module.exports.getClient = () => mongoClient
