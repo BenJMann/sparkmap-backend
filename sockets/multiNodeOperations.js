@@ -2,7 +2,6 @@ const {getDB} = require('../getClient.js')
 
 module.exports = function(socket, io) {
 
-
     socket.on("deleteCell", async(data) => {
         if (!socket.data.authorized) return
 
@@ -142,7 +141,7 @@ module.exports = function(socket, io) {
                 if (!fromParent) {
                     throw new Error("Parent nodes not found.");
                 }
-                
+
                 // Move node between different parents
                 await documents.updateOne({ id: fromParent.id }, { $pull: { children: fromId } }); // Remove from old parent
                 await documents.updateOne({ id: toId }, { $push: { children: fromId} }); // Add to new parent
