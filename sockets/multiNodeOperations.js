@@ -13,9 +13,9 @@ module.exports = function(socket, io) {
         })
 
         const nodeId = data.path.slice(-1)[0]
+        const client = await getDB()
+        const session = client.client.startSession();
         try {
-            const client = await getDB()
-            const session = client.client.startSession();
 
             await session.withTransaction( async() => {
                 const node = await client.collection("nodes").findOne({id: nodeId, documentId: socket.data.documentId})
@@ -37,6 +37,8 @@ module.exports = function(socket, io) {
             
         } catch (error) {
             console.error("Error in deleteCell:", error);
+        } finally {
+            session.endSession();
         }
     })
 
@@ -52,9 +54,9 @@ module.exports = function(socket, io) {
         const toId = toPath.slice(-1)[0]
         const fromId = fromPath.slice(-1)[0]
 
+        const client = await getDB();
+        const session = client.client.startSession();
         try {
-            const client = await getDB();
-            const session = client.client.startSession();
             await session.withTransaction( async () => {
                 const documents = client.collection('nodes');
 
@@ -100,6 +102,8 @@ module.exports = function(socket, io) {
             
         } catch (error) {
             console.error("Error in pasteNode:", error);
+        } finally {
+            session.endSession();
         }
     });
 

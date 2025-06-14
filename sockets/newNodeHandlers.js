@@ -6,7 +6,6 @@ module.exports = function(socket, io) {
     socket.on("newSiblingNode", async (data) => {
         if (!socket.data.authorized) return
 
-
         const id = uuidv4();
         const parentId = data.path.slice(-2)[0]
         const nodeId = data.path.slice(-1)[0]
@@ -21,54 +20,56 @@ module.exports = function(socket, io) {
 
         const client = await getDB();
 
-        await client.collection("nodes").bulkWrite([
-            {
-                updateOne: {
-                    filter: { id: parentId, documentId: socket.data.documentId },
-                    update: [
-                        {
-                            $set: {
-                                children: {
-                                    $let: {
-                                        vars: {
-                                            idx: { $indexOfArray: ["$children", nodeId] },
-                                        },
-                                        in: {
-                                            $cond: {
-                                                if: { $lt: [{$add: ["$$idx", data.before ? 0 : 1]}, 1] },
-                                                then: {$concatArrays: [
-                                                    [id],
-                                                    "$children",
-                                                ]},
-                                                else: {
-                                                    $concatArrays: [
-                                                        { $slice: ["$children", 0, { $add: ["$$idx", data.before ? 0 : 1] }] },
+        try {
+            await client.collection("nodes").bulkWrite([
+                {
+                    updateOne: {
+                        filter: { id: parentId, documentId: socket.data.documentId },
+                        update: [
+                            {
+                                $set: {
+                                    children: {
+                                        $let: {
+                                            vars: {
+                                                idx: { $indexOfArray: ["$children", nodeId] },
+                                            },
+                                            in: {
+                                                $cond: {
+                                                    if: { $lt: [{$add: ["$$idx", data.before ? 0 : 1]}, 1] },
+                                                    then: {$concatArrays: [
                                                         [id],
-                                                        { $slice: ["$children", { $add: ["$$idx", data.before ? 0 : 1] }, { $size: "$children" }] },
-                                                    ],
-                                                },
-                                            }
+                                                        "$children",
+                                                    ]},
+                                                    else: {
+                                                        $concatArrays: [
+                                                            { $slice: ["$children", 0, { $add: ["$$idx", data.before ? 0 : 1] }] },
+                                                            [id],
+                                                            { $slice: ["$children", { $add: ["$$idx", data.before ? 0 : 1] }, { $size: "$children" }] },
+                                                        ],
+                                                    },
+                                                }
+                                            },
                                         },
                                     },
                                 },
                             },
-                        },
-                    ],
-                },
-            },
-            {
-                insertOne: {
-                    document: {
-                        id,
-                        text: '',
-                        documentId: socket.data.documentId,
-                        creator: socket.data.username,
+                        ],
                     },
                 },
-            },
-        ]);
-        
-        
+                {
+                    insertOne: {
+                        document: {
+                            id,
+                            text: '',
+                            documentId: socket.data.documentId,
+                            creator: socket.data.username,
+                        },
+                    },
+                },
+            ]);
+        } catch (error) {
+            console.error("Error in newSiblingNode", error)
+        }    
     })
 
 
@@ -85,26 +86,31 @@ module.exports = function(socket, io) {
         })
 
         const client = await getDB();
-        await client.collection("nodes").bulkWrite([
-            // Update the parent's children array
-            {
-                updateOne: {
-                    filter: { id: nodeId, documentId: socket.data.documentId },
-                    update: { $push: { children: id } },
-                },
-            },
-            // Insert the new node
-            {
-                insertOne: {
-                    document: {
-                        id,
-                        text: '',
-                        documentId: socket.data.documentId,
-                        creator: socket.data.username,
+        try {
+                await client.collection("nodes").bulkWrite([
+                    // Update the parent's children array
+                    {
+                        updateOne: {
+                            filter: { id: nodeId, documentId: socket.data.documentId },
+                            update: { $push: { children: id } },
+                        },
                     },
-                },
-            },
-        ]);
+                    // Insert the new node
+                    {
+                        insertOne: {
+                            document: {
+                                id,
+                                text: '',
+                                documentId: socket.data.documentId,
+                                creator: socket.data.username,
+                            },
+                        },
+                    },
+                ]);
+            } catch (error) {
+                console.error("error in newChildNode", error)
+            }
+        
     })
 
     socket.on("appendChildNode", async (data) => {
@@ -124,27 +130,29 @@ module.exports = function(socket, io) {
 
         const client = await getDB();
 
-        await client.collection("nodes").bulkWrite([
-            // Update the parent's children array by appending the new ID
-            {
-                updateOne: {
-                    filter: { id: nodeId, documentId: socket.data.documentId },
-                    update: { $push: { children: id } },
-                },
-            },
-            // Insert the new node
-            {
-                insertOne: {
-                    document: {
-                        id,
-                        text: '',
-                        documentId: socket.data.documentId,
-                        creator: socket.data.username,
+        try {
+            await client.collection("nodes").bulkWrite([
+                // Update the parent's children array by appending the new ID
+                {
+                    updateOne: {
+                        filter: { id: nodeId, documentId: socket.data.documentId },
+                        update: { $push: { children: id } },
                     },
                 },
-            },
-        ]);
-        
-        
+                // Insert the new node
+                {
+                    insertOne: {
+                        document: {
+                            id,
+                            text: '',
+                            documentId: socket.data.documentId,
+                            creator: socket.data.username,
+                        },
+                    },
+                },
+            ]);
+        } catch (error) {
+                console.error("error in appendChildNode", error)
+            }  
     })
 }

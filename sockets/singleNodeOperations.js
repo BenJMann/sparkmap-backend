@@ -12,7 +12,11 @@ module.exports = function(socket, io) {
         })
 
         const client = await getDB()
-        await client.collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {text: data.text, creator: socket.data.username}})
+        try {
+            await client.collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {text: data.text, creator: socket.data.username}})
+        } catch (error) {
+            console.error("Error in updateNodeText", error)
+        }
     })
 
     socket.on("updateNodeStyle", async(data) => {
@@ -26,7 +30,11 @@ module.exports = function(socket, io) {
         })
 
         const client = await getDB()
-        await client.collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {[`style.${data.property}`]: data.value}})
+        try {
+            await client.collection("nodes").updateOne({id: nodeId, documentId: socket.data.documentId}, {$set: {[`style.${data.property}`]: data.value}})
+        } catch (error) {
+            console.error("Error in updateNodeStyle", error)
+        }
     })
 
     socket.on("lockCell", async(data) => {

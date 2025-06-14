@@ -8,39 +8,49 @@ module.exports = function(socket, io) {
     socket.on("newDocument", async (data) => {
         if (!socket.data.authorized) return
 
-        const client = await getDB()
         const documentId = makeid(12);
-
+        
         const rootId = uuidv4();
         const childId = uuidv4();
-        await client.collection("nodes").insertMany([
-            {
-                documentId,
-                root: true,
-                id: rootId,
-                children: [
-                    childId
-                ]
-            },
-            {
-                documentId,
-                id: childId,
-                text: '',
-            }
-        ])
+        const client = await getDB()
+        const session = client.client.startSession();
+        try {
+            await session.withTransaction( async () => {
+                await client.collection("nodes").insertMany([
+                    {
+                        documentId,
+                        root: true,
+                        id: rootId,
+                        children: [
+                            childId
+                        ]
+                    },
+                    {
+                        documentId,
+                        id: childId,
+                        text: '',
+                    }
+                ])
 
-        const documentName = data.name;
-        const lastModified = new Date()
-        const user = socket.data.username;
-        await client.collection("documents").insertOne({
-            documentId,
-            documentName,
-            lastModified,
-            user,
-            shared: []
-        })
+                const documentName = data.name;
+                const lastModified = new Date()
+                const user = socket.data.username;
+                await client.collection("documents").insertOne({
+                    documentId,
+                    documentName,
+                    lastModified,
+                    user,
+                    shared: []
+                })
+            })
+            socket.emit("documentCreated", {documentId})
+        } catch (error) {
+            console.error("Error in newDocument", error)
+        } finally {
+            session.endSession()
+        }
 
-        socket.emit("documentCreated", {documentId})
+    
     })
 
 
@@ -53,29 +63,37 @@ module.exports = function(socket, io) {
         const {rootNodes, flatArray} = nestedToFlatArray(documentId, JSON.parse(data.json), socket.data.username);
 
         const client = await getDB()
+        const session = client.client.startSession();
 
-        await client.collection("nodes").insertMany([
-            {
-                documentId,
-                id: uuidv4(),
-                root: true,
-                children: rootNodes,
-                creator: socket.data.username
-            },
-            ...flatArray])
+        try {
+            session.withTransaction( async () => {
+                await client.collection("nodes").insertMany([
+                    {
+                        documentId,
+                        id: uuidv4(),
+                        root: true,
+                        children: rootNodes,
+                        creator: socket.data.username
+                    },
+                    ...flatArray])
 
-        const documentName = data.name;
-        const lastModified = new Date()
-        const user = socket.data.username;
-        await client.collection("documents").insertOne({
-            documentId,
-            documentName,
-            lastModified,
-            user,
-            shared: []
-        })
-
-        socket.emit("csvLoaded", {documentId})
+                const documentName = data.name;
+                const lastModified = new Date()
+                const user = socket.data.username;
+                await client.collection("documents").insertOne({
+                    documentId,
+                    documentName,
+                    lastModified,
+                    user,
+                    shared: []
+                })
+            })
+            socket.emit("csvLoaded", {documentId})
+        } catch (error) {
+            console.error("Error in loadCSV", error)
+        } finally {
+            session.endSession();
+        }
     })
 
 //--------------Get Documents-----------------------------
@@ -83,13 +101,17 @@ module.exports = function(socket, io) {
         if (!socket.data.authorized) return
 
         const client = await getDB()
-        const documents = client.collection("documents").find({
-           $or: [
-            {user: socket.data.username},
-            {shared: socket.data.username}
-           ]
-        })
-        socket.emit("documentsGot", await documents.toArray())
+        try {
+            const documents = client.collection("documents").find({
+            $or: [
+                {user: socket.data.username},
+                {shared: socket.data.username}
+            ]
+            })
+            socket.emit("documentsGot", await documents.toArray())
+        } catch (error) {
+            console.error("Error in getDocuments");
+        }
     })
 
     const loadDocument = async (client, documentId) => {
@@ -120,25 +142,29 @@ module.exports = function(socket, io) {
         if (!socket.data.authorized) return
 
         const client = await getDB()
-        const result = client.collection("documents").findOne({
-            documentId: data.documentId,
-            $or: [
-                {user: socket.data.username},
-                {shared: socket.data.username}
-            ]
-        })
 
-        const doc = await result;
-        if (!doc) {
-            socket.emit("fatalError", {error: true, message: "You are not authorized to view this document, or it doesn't exist"})
-            return
+        try {
+            const result = client.collection("documents").findOne({
+                documentId: data.documentId,
+                $or: [
+                    {user: socket.data.username},
+                    {shared: socket.data.username}
+                ]
+            })
+
+            const doc = await result;
+            if (!doc) {
+                socket.emit("fatalError", {error: true, message: "You are not authorized to view this document, or it doesn't exist"})
+                return
+            }
+
+            socket.data.documentId = data.documentId;
+            const {warnings, rootNode} = await loadDocument(client, data.documentId)
+
+            socket.emit("documentLoaded", {warnings, nodes: [rootNode], document: doc})
+        } catch (error) {
+            console.error("Error in loadDocument", error)
         }
-
-        socket.data.documentId = data.documentId;
-
-        const {warnings, rootNode} = await loadDocument(client, data.documentId)
-
-        socket.emit("documentLoaded", {warnings, nodes: [rootNode], document: doc})
     })
 
 //------------Document Operations-----------------------
@@ -147,12 +173,16 @@ module.exports = function(socket, io) {
         if (!socket.data.authorized) return
 
         const client = await getDB()
-        const user = await client.collection("users").findOne({username: data.username})
-        if (!user) {
-            socket.emit("documentShared", {error: true, message: 'User does not exist.'})
-            return
+        try {
+            const user = await client.collection("users").findOne({username: data.username})
+            if (!user) {
+                socket.emit("documentShared", {error: true, message: 'User does not exist.'})
+                return
+            }
+            await client.collection("documents").updateOne({documentId: socket.data.documentId}, {$push: {shared: data.username}})
+        } catch (error) {
+            console.error("Error in shareDocument", error);
         }
-        await client.collection("documents").updateOne({documentId: socket.data.documentId}, {$push: {shared: data.username}})
         socket.emit("documentShared", {error: false})
     })
 
@@ -161,42 +191,56 @@ module.exports = function(socket, io) {
 
         const client = await getDB()
 
-        await client.collection("documents").updateOne({
-            documentId: data.documentId,
-            user: socket.data.username
-        },     
-            {$set: {documentName: data.newDocumentName}})
+        try {
+            await client.collection("documents").updateOne({
+                documentId: data.documentId,
+                user: socket.data.username
+            },     
+                {$set: {documentName: data.newDocumentName}})
 
-        const documents = client.collection("documents").find({
-           $or: [
-            {user: socket.data.username},
-            {shared: socket.data.username}
-           ]
-        })
-        socket.emit("documentsGot", await documents.toArray())
+            const documents = client.collection("documents").find({
+            $or: [
+                {user: socket.data.username},
+                {shared: socket.data.username}
+            ]
+            })
+            socket.emit("documentsGot", await documents.toArray())
+        } catch (error) {
+            console.error("Error in renameDocument", error)
+        }
+
     })
 
     socket.on("deleteDocument", async (data) => {
         if (!socket.data.authorized) return
 
         const client = await getDB()
+        const session = client.client.startSession();
 
-        await client.collection("documents").deleteOne({
-            documentId: data.documentId,
-            user: socket.data.username
-        })
+        try {
+            await session.withTransaction( async () => {
+                await client.collection("documents").deleteOne({
+                    documentId: data.documentId,
+                    user: socket.data.username
+                })
 
-        await client.collection("nodes").deleteMany({
-            documentId: data.documentId
-        })
+                await client.collection("nodes").deleteMany({
+                    documentId: data.documentId
+                })
 
-        const documents = client.collection("documents").find({
-           $or: [
-            {user: socket.data.username},
-            {shared: socket.data.username}
-           ]
-        })
-        socket.emit("documentsGot", await documents.toArray())
+                const documents = client.collection("documents").find({
+                $or: [
+                    {user: socket.data.username},
+                    {shared: socket.data.username}
+                ]
+                })
+                socket.emit("documentsGot", await documents.toArray())
+            })
+        } catch (error) {
+            console.error("Error in deleteDocument", error)
+        } finally {
+            session.endSession();
+        }
     })
 
 
