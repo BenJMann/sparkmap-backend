@@ -107,7 +107,7 @@ module.exports = function(socket, io) {
     });
 
     socket.on("pasteNodeAsChild", async(data) => {
-        const {before, toPath, fromPath} = data
+        const {toPath, fromPath} = data
 
         let sockets = Array.from(io.sockets.sockets)  
         sockets.forEach((s) => {
@@ -148,7 +148,7 @@ module.exports = function(socket, io) {
             })
             
         } catch (error) {
-            console.error("Error in pasteNode:", error);
+            console.error("Error in pasteNodeAsChild:", error);
         } finally {
             session.endSession();
         }
@@ -162,4 +162,24 @@ module.exports = function(socket, io) {
         }
         return false;
     }
+
+    socket.on("moveNode", async(data) => {
+        const {path, children} = data
+
+        let sockets = Array.from(io.sockets.sockets)  
+        sockets.forEach((s) => {
+            if (s[1].data.documentId === socket.data.documentId && s[1] !== socket)
+                s[1].emit("nodeMoved", data)
+        })
+
+        const parentId = path.slice(-1)[0]
+        console.log("PID", parentId)
+        const client = await getDB();
+        try {
+            const nodes = client.collection('nodes');
+            await nodes.updateOne({ id: parentId }, { $set: { children: children } });
+        } catch (error) {
+            console.error("Error in moveNode:", error);
+        }
+    });
 }
