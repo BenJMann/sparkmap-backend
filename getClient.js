@@ -5,12 +5,17 @@ let mongoClient;
 
 async function initDB() {
   try {
-     const uri = `mongodb+srv://${process.env.MONGODB_USERNAME}:${process.env.MONGODB_PASSWORD}@${process.env.MONGODB_CLUSTER}.mongodb.net/?retryWrites=true&w=majority`;
+    //  const uri = `mongodb+srv://${process.env.MONGODB_USERNAME}:${process.env.MONGODB_PASSWORD}@${process.env.MONGODB_CLUSTER}.mongodb.net/?retryWrites=true&w=majority`;
+    const uri = `mongodb://${process.env.COSMOSDB_ACCOUNT}:${process.env.COSMOSDB_KEY}@${process.env.COSMOSDB_ACCOUNT}.mongo.cosmos.azure.com:10255/?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@${process.env.COSMOSDB_ACCOUNT}@`;
     mongoClient = new MongoClient(uri, {
-      maxPoolSize: 50,      // Maximum number of connections in the pool
-      minPoolSize: 10,      // Minimum connections to keep open
-      socketTimeoutMS: 30000, // Timeout for operations
-      connectTimeoutMS: 5000, // Timeout for initial connection
+      retryWrites: false, // Must be false for Cosmos DB
+      retryReads: false,
+      appName: "@Sparkmap@", // Helps with monitoring
+      connectTimeoutMS: 30000,
+      socketTimeoutMS: 30000,
+      // Keep your existing pool settings
+      maxPoolSize: 50,
+      minPoolSize: 10
     });
     
     await mongoClient.connect();
@@ -21,7 +26,6 @@ async function initDB() {
   }
 }
 
-// Initialize the pool when the server starts
 initDB();
 
 setInterval(async () => {

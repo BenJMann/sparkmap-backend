@@ -13,7 +13,7 @@ module.exports = function(socket, io) {
         const rootId = uuidv4();
         const childId = uuidv4();
         const client = await getDB()
-        const session = client.client.startSession();
+        const session = client.s.client.startSession();
         try {
             await session.withTransaction( async () => {
                 await client.collection("nodes").insertMany([
@@ -63,7 +63,7 @@ module.exports = function(socket, io) {
         const {rootNodes, flatArray} = nestedToFlatArray(documentId, JSON.parse(data.json), socket.data.username);
 
         const client = await getDB()
-        const session = client.client.startSession();
+        const session = client.s.client.startSession();
 
         try {
             session.withTransaction( async () => {
@@ -215,7 +215,7 @@ module.exports = function(socket, io) {
         if (!socket.data.authorized) return
 
         const client = await getDB()
-        const session = client.client.startSession();
+        const session = client.s.client.startSession();
 
         try {
             await session.withTransaction( async () => {

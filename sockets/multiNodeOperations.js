@@ -13,7 +13,7 @@ module.exports = function(socket, io) {
 
         const nodeId = data.path.slice(-1)[0]
         const client = await getDB()
-        const session = client.client.startSession();
+        const session = client.s.client.startSession();
         try {
 
             await session.withTransaction( async() => {
@@ -54,7 +54,7 @@ module.exports = function(socket, io) {
         const fromId = fromPath.slice(-1)[0]
 
         const client = await getDB();
-        const session = client.client.startSession();
+        const session = client.s.client.startSession();
         try {
             await session.withTransaction( async () => {
                 const documents = client.collection('nodes');
@@ -119,7 +119,7 @@ module.exports = function(socket, io) {
         const fromId = fromPath.slice(-1)[0]
 
         const client = await getDB();
-        const session = client.client.startSession();
+        const session = client.s.client.startSession();
         try {
             await session.withTransaction( async () => {
                 const documents = client.collection('nodes');
