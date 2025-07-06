@@ -55,12 +55,18 @@ const io = new Server(server, {
 
 app.use(helmet());
 app.use(cors())
+
+const qanaojWebhooks = require("./Qanaoj/qanaojWebhooks.js")
+app.use("/qanaojWebhooks", qanaojWebhooks)
+
 app.use(express.json());
 app.use(bodyParser.urlencoded())
 app.use(bodyParser.json())
 
 
+const qanaojRoutes = require('./Qanaoj/qanaojRoutes.js');
 
+app.use('/qanaoj', qanaojRoutes);
 
 
 // app.post('/register', async (req, res) => {
